@@ -21,6 +21,17 @@ include("shared.lua")
 include("utils/teams.lua")
 
 --[[
+    Game logic
+]]--
+
+local criticalPoints = {}
+local gamePlayers = {}
+
+local function PushPlayerToGame(argPly, argTeamName)
+    gamePlayers[#gamePlayers + 1] = { ply = argPly, teamName = argTeamName }
+end
+
+--[[
     Chat
 ]]--
 
@@ -96,6 +107,16 @@ local chatCommands = {
             return
         end
 
+        criticalPoints = ents.FindByClass("critical_point")
+        if (#criticalPoints == 0) then
+            sender:PrintMessage(HUD_PRINTTALK, "Прежде чем начинать игру, нужно поставить ключевые точки.")
+            return
+        end
+
+        for k, criticalPoint in ipairs(criticalPoints) do
+            criticalPoint:Enable(0, noTeam, noTeam)
+        end
+
         --[[
             Для тестов:
                 * я спавню N ботов 
@@ -122,25 +143,50 @@ local chatCommands = {
 
         --]]--
 
-        local PlayersInTeams = {}
-        local KickedPlayersArray = {}
-        PlayersInTeams, KickedPlayersArray = MergePlayersFromLobby()
+        local playersInTeams = {}
+        local kickedPlayersArray = {}
+        playersInTeams, kickedPlayersArray = MergePlayersFromLobby()
 
-        for steamid64, plyInfo in ipairs(KickedPlayersArray) do
+        local gameTeamsTypes = GetTeams()
+
+        for steamid64, plyInfo in ipairs(kickedPlayersArray) do
             plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
         end
 
-        for team_name, team_array in pairs(PlayersInTeams) do
-            for k, ply in pairs(team_array) do
-                ply:PrintMessage(HUD_PRINTTALK, string.format("Вы начинаете за команду '%s'!", team_name))
+
+        --[[
+            Теперь когда все манипуляции по перемещение игроков из команды в команду завершены, 
+            нам может потребоваться более простой массив игроков:
+            {
+                [1] = { ply = <entity>, team = <teamName>, ... }
+                ...
+            }
+        ]]--
+
+        gamePlayers = {}
+        for teamName, teamArray in pairs(playersInTeams) do
+            for k, ply in pairs(teamArray) do
+                PushPlayerToGame(ply, teamName)
+                ply:PrintMessage(HUD_PRINTTALK, string.format("Вы начинаете за команду '%s'!", teamName))
+
+                --[[
+                ]]
+                local clr = gameTeamsTypes[teamName].color
+                ply:SetPlayerColor(Vector(clr.r, clr.g, clr.b) / 255)
+                --]]--
             end
         end
 
         --[[
-            Теперь когда игроки распределены, можно начинать игру
+            Теперь когда игроки распределены, можно начинать игру.
         ]]--
 
-
+        hook.Remove("Tick", "koth_critical_points_management")
+        hook.Add("Tick", "koth_critical_points_management", function ()
+            for k, criticalPoint in ipairs(criticalPoints) do
+                criticalPoint:InteractWithPlayers(gamePlayers)
+            end
+        end)
     end
 }
 
@@ -150,10 +196,11 @@ local chatCommands = {
 
 -- Server-side initialization function for the entity
 function ENT:Initialize()
-    self:SetModel( "models/hunter/blocks/cube025x025x025.mdl" ) -- Sets the model for the entity.
-    self:PhysicsInit( SOLID_VPHYSICS ) -- Initializes physics for the entity, making it solid and interactable.
-    self:SetMoveType( MOVETYPE_VPHYSICS ) -- Sets how the entity moves, using physics.
-    self:SetSolid( SOLID_VPHYSICS ) -- Makes the entity solid, allowing for collisions.
+    -- Из примера на wiki.facepunch.com
+    self:SetModel("models/hunter/blocks/cube025x025x025.mdl") -- Sets the model for the entity.
+    self:PhysicsInit(SOLID_VPHYSICS) -- Initializes physics for the entity, making it solid and interactable.
+    self:SetMoveType(MOVETYPE_VPHYSICS) -- Sets how the entity moves, using physics.
+    self:SetSolid(SOLID_VPHYSICS) -- Makes the entity solid, allowing for collisions.
     local phys = self:GetPhysicsObject() -- Retrieves the physics object of the entity.
     if (phys:IsValid()) then -- Checks if the physics object is valid.
         phys:Wake() -- Activates the physics object, making the entity subject to physics (gravity, collisions, etc.).
@@ -173,7 +220,6 @@ function ENT:Initialize()
                 sender:PrintMessage(HUD_PRINTTALK, string.format("Нет такой чат-команды '%s'", text))
             else
                 chatCommand(sender, args)
-                PrintTable(args)
             end
         end
     end)
@@ -181,6 +227,16 @@ end
 
 function ENT:OnRemove(fullUpdate)
     hook.Remove("PlayerSay", "koth_chat_command_listener")
+    for k, plyInfo in ipairs(gamePlayers) do
+        plyInfo.ply:PrintMessage(HUD_PRINTCENTER, "Игра окончена.")
+    end
+    gamePlayers = nil
+
+    hook.Remove("Tick", "koth_critical_points_management")
+    for k, criticalPoint in ipairs(criticalPoints) do
+        criticalPoint:Disable()
+    end
+    criticalPoints = nil
 end
 
 function ENT:UpdateTransmitState()

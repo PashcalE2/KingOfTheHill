@@ -1,6 +1,5 @@
 local playersInLobby
 local playersInTeams
-local noTeam
 local defaultTeamsTypes
 local gameTeamsTypes
 
@@ -26,9 +25,9 @@ noTeam = "noTeam"
     По-умолчанию сделаю 2 команды, но их количество можно менять динамически (в игре).
 ]]--
 defaultTeamsTypes = {
-    [noTeam] = Color(255, 255, 255, 255),
-    ["Red"] = Color(255, 63, 0, 255),
-    ["Blue"] = Color(0, 127, 255, 255)
+    [noTeam] = { color = Color(255, 255, 255, 255) },
+    ["Red"] = { color = Color(255, 31, 0, 255) },
+    ["Blue"] = { color = Color(0, 127, 255, 255) }
 }
 
 
@@ -38,8 +37,8 @@ defaultTeamsTypes = {
 ]]--
 gameTeamsTypes = {}
 
-function AddTeam(name, color)
-    gameTeamsTypes[name] = color
+function AddTeam(name, argColor)
+    gameTeamsTypes[name] = { color = argColor }
 end
 
 function GetTeams()
@@ -135,6 +134,9 @@ end
 ]]--
 playersInTeams = {}
 
+function ClearTeams()
+    playersInTeams = {}
+end
 
 --[[
     Так как изначальный вариант лобби предусматривает "wishTeam", то первоначальное распределение будет именно по этому полю.

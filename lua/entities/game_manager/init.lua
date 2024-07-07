@@ -2,6 +2,7 @@ AddCSLuaFile("cl_init.lua")
 AddCSLuaFile("shared.lua")
 include("shared.lua")
 
+
 --[[
     function AddTeam(name, color)
     function GetTeams()
@@ -178,7 +179,10 @@ local chatCommands = {
         end
 
         --[[
-            Теперь когда игроки распределены, можно начинать игру.
+            Теперь когда игроки распределены, можно начинать игру:
+                1. расставить игроков по позициям;
+                2. возможно для пафоса зафризить и поставить таймер, после которого игра начнется;
+                3. ...
         ]]--
 
         hook.Remove("Tick", "koth_critical_points_management")

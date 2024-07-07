@@ -5,14 +5,14 @@ function ENT:Draw()
     self:DrawModel() -- Draws the model of the entity. This function is called every frame.
 end
 
-/*
-function ENT:Think()
-    print(self:GetCaptureProgress())
-end
-*/
 
 function ENT:Initialize()
-    print(self:GetCaptureProgress())
-    print(self:GetOwnerTeam())
-    print(self:GetCaptureTeam())
+    --[[
+    timer.Create("repeat", 1, 0, function ()
+        print("Progress = " .. self:GetCaptureProgress())
+        print("OwnerTeam = " .. self:GetOwnerTeamId())
+        print("CaptureTeam = " .. self:GetCaptureTeamId())
+        print("Status = " .. self:GetStatus())
+    end)
+    ]]--
 end

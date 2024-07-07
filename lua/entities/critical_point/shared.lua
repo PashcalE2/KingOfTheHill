@@ -11,6 +11,30 @@ ENT.AdminOnly = true
 
 captureRadius = 200
 
+--[[
+    Состояния точки (нужно фронтендерам):
+        1. ничья <=> начальное состояние
+        2. захватывается <=> ничья И есть захватчики ОДНОЙ КОМАНДЫ
+        3. борьба <=> ничья И есть РАЗНЫЕ захватчики
+            * захват приостановлен
+            * та команда, которая осталась после борьбы, продолжает захват
+        4. восстановливается <=> НЕ ничья И есть владельцы И нет захватчиков ВОЗМОЖНО РАЗНЫХ КОМАНД
+            * прогресс захвата восстанавливается до 1
+        5. под защитой <=> НЕ ничья И есть владельцы И есть захватчики ВОЗМОЖНО РАЗНЫХ КОМАНД
+            * прогресс отхвата приостанавливается
+        6. отхватывается <=> НЕ ничья И есть захватчики ВОЗМОЖНО РАЗНЫХ КОМАНД
+        7. захвачена <=> НЕ ничья И на точке пусто
+]]--
+CRITICAL_POINT_STATUS_ENUM = {
+    NO_OWNER = 1,
+    CAPTURING = 2,
+    STRUGGLING = 3,
+    RECOVERING = 4,
+    PROTECTED = 5,
+    DECAPTURING = 6,
+    CAPTURED = 7
+}
+
 function ENT:SetupDataTables()
     --[[
         value == 0 - точка НИЧЬЯ
@@ -18,29 +42,17 @@ function ENT:SetupDataTables()
         value == 1 - точка захвачена командой
     ]]--
     self:NetworkVar("Float", 0, "CaptureProgress")
-    self:NetworkVarNotify("CaptureProgress", function (ent, name, old, new)
-        if (new < 0) then
-            new = 0
-        elseif (new > 1) then
-            new = 1
-        end
-
-        print(ent, name, old, new)
-    end)
 
     --[[
         Та команда, которая последняя полностью захватила точку (может быть `noTeam`)
     ]]--
-    self:NetworkVar("String", 0, "OwnerTeam")
-    self:NetworkVarNotify("OwnerTeam", function (ent, name, old, new)
-        print(ent, name, old, new)
-    end)
+    self:NetworkVar("Int", 0, "OwnerTeamId")
 
     --[[
         Та команда, которая оспаривает точку (`noTeam` если CaptureProgress == 0 или 1)
     ]]--
-    self:NetworkVar("String", 1, "CaptureTeam")
-    self:NetworkVarNotify("CaptureTeam", function (ent, name, old, new)
-        print(ent, name, old, new)
-    end)
+    self:NetworkVar("Int", 1, "CaptureTeamId")
+
+
+    self:NetworkVar("Int", 2, "Status")
 end

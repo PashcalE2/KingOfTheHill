@@ -4,20 +4,28 @@ include("shared.lua")
 
 
 --[[
-    function AddTeam(name, color)
-    function GetTeams()
-    function DeleteTeam(name)
-    function TeamExists(name)
-    function SetDefaultTeams()
+    Глобальные переменные:
+        noTeam
+        noTeamId
+        gameTeamsByName
 
-    function PutPlayerInfoToLobby(arg_ply, arg_wish_team)
-    function GetLobby()
-    function GetPlayerInfoFromLobby(arg_ply)
-    function ClearLobby()
-    function RemovePlayerInfoFromLobby(arg_ply)
-    function LobbyHasPlayerInfo(arg_ply)
+    Глобальные функции:
+        AddTeam(name, color)
+        UpdateTeamsIds()
+        GetTeams()
+        DeleteTeam(name)
+        TeamExists(name)
+        SetDefaultTeams()
 
-    function MergePlayersFromLobby()
+        PutPlayerInfoToLobby(arg_ply, arg_wish_team)
+        GetLobby()
+        GetPlayerInfoFromLobby(arg_ply)
+        ClearLobby()
+        RemovePlayerInfoFromLobby(arg_ply)
+        LobbyHasPlayerInfo(arg_ply)
+
+        ClearTeams()
+        MergePlayersFromLobby()
 ]]--
 include("utils/teams.lua")
 
@@ -25,11 +33,17 @@ include("utils/teams.lua")
     Game logic
 ]]--
 
+local lastRealTime
 local criticalPoints = {}
-local gamePlayers = {}
+KOTFPlayers = {}
 
-local function PushPlayerToGame(argPly, argTeamName)
-    gamePlayers[#gamePlayers + 1] = { ply = argPly, teamName = argTeamName }
+local function PushPlayerToGame(argPly, argTeamId, argTeamName)
+    KOTFPlayers[#KOTFPlayers + 1] = { 
+        ply = argPly,
+        teamId = argTeamId,
+        teamName = argTeamName,
+        oldPlyColor = argPly:GetPlayerColor()
+    }
 end
 
 --[[
@@ -115,7 +129,7 @@ local chatCommands = {
         end
 
         for k, criticalPoint in ipairs(criticalPoints) do
-            criticalPoint:Enable(0, noTeam, noTeam)
+            criticalPoint:Enable()
         end
 
         --[[
@@ -148,7 +162,8 @@ local chatCommands = {
         local kickedPlayersArray = {}
         playersInTeams, kickedPlayersArray = MergePlayersFromLobby()
 
-        local gameTeamsTypes = GetTeams()
+        UpdateTeamsIds()
+        local gameTeamsByName = GetTeams()
 
         for steamid64, plyInfo in ipairs(kickedPlayersArray) do
             plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
@@ -164,16 +179,16 @@ local chatCommands = {
             }
         ]]--
 
-        gamePlayers = {}
+        KOTFPlayers = {}
         for teamName, teamArray in pairs(playersInTeams) do
             for k, ply in pairs(teamArray) do
-                PushPlayerToGame(ply, teamName)
+                local teamStruct = gameTeamsByName[teamName]
+                PushPlayerToGame(ply, teamStruct.id, teamName)
                 ply:PrintMessage(HUD_PRINTTALK, string.format("Вы начинаете за команду '%s'!", teamName))
 
                 --[[
                 ]]
-                local clr = gameTeamsTypes[teamName].color
-                ply:SetPlayerColor(Vector(clr.r, clr.g, clr.b) / 255)
+                ply:SetPlayerColor(Vector(teamStruct.color.r, teamStruct.color.g, teamStruct.color.b) / 255)
                 --]]--
             end
         end
@@ -185,11 +200,22 @@ local chatCommands = {
                 3. ...
         ]]--
 
+        lastRealTime = RealTime()
+        PrintTable(KOTFPlayers)
         hook.Remove("Tick", "koth_critical_points_management")
         hook.Add("Tick", "koth_critical_points_management", function ()
+            local realTime = RealTime()
+            local tickInterval = realTime - lastRealTime
+
             for k, criticalPoint in ipairs(criticalPoints) do
-                criticalPoint:InteractWithPlayers(gamePlayers)
+                if not criticalPoint:IsValid() then
+                    continue
+                end
+
+                criticalPoint:InteractWithPlayers(tickInterval)
             end
+
+            lastRealTime = realTime
         end)
     end
 }
@@ -229,18 +255,30 @@ function ENT:Initialize()
     end)
 end
 
+
+--[[
+    Пока что я решил записать логику выпуска из игры при удалении ентити игры. 
+
+    Тут должно произойти сообщение об окончании игры и восставновления аддона до АДЕКВАТНОГО первоначального состояния.
+    Так как я по приколу менял цвета игрокам - их можно вернуть здесь.
+]]--
 function ENT:OnRemove(fullUpdate)
     hook.Remove("PlayerSay", "koth_chat_command_listener")
-    for k, plyInfo in ipairs(gamePlayers) do
+    for k, plyInfo in ipairs(KOTFPlayers) do
         plyInfo.ply:PrintMessage(HUD_PRINTCENTER, "Игра окончена.")
+        plyInfo.ply:SetPlayerColor(plyInfo.oldPlyColor)
     end
-    gamePlayers = nil
+    KOTFPlayers = {}
 
     hook.Remove("Tick", "koth_critical_points_management")
     for k, criticalPoint in ipairs(criticalPoints) do
+        if not criticalPoint:IsValid() then
+            continue
+        end
+
         criticalPoint:Disable()
     end
-    criticalPoints = nil
+    criticalPoints = {}
 end
 
 function ENT:UpdateTransmitState()

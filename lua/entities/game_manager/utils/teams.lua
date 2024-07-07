@@ -10,8 +10,7 @@
 
 local playersInLobby
 local playersInTeams
-local defaultTeamsTypes
-local gameTeamsTypes
+local defaultTeams
 
 --[[
     Teams
@@ -26,6 +25,7 @@ local gameTeamsTypes
 ]]--
 
 noTeam = "noTeam"
+noTeamId = 0
 
 
 --[[
@@ -34,8 +34,8 @@ noTeam = "noTeam"
 
     По-умолчанию сделаю 2 команды, но их количество можно менять динамически (в игре).
 ]]--
-defaultTeamsTypes = {
-    [noTeam] = { color = Color(255, 255, 255, 255) },
+defaultTeams = {
+    [noTeam] = { color = Color(255, 255, 255, 255), id = noTeamId },
     ["Red"] = { color = Color(255, 31, 0, 255) },
     ["Blue"] = { color = Color(0, 127, 255, 255) }
 }
@@ -45,14 +45,24 @@ defaultTeamsTypes = {
     Эта таблица описывает какие команды есть на данный момент.
     При запуске этого скрипта в первый раз (а так же наверно сделаю chat команду) будет эквивалентно тимам по-умолчанию
 ]]--
-gameTeamsTypes = {}
+gameTeamsByName = {}
 
 function AddTeam(name, argColor)
-    gameTeamsTypes[name] = { color = argColor }
+    gameTeamsByName[name] = { color = argColor }
+end
+
+function UpdateTeamsIds()
+    local count = 0
+    for teamName, teamStruct in pairs(gameTeamsByName) do
+        if teamStruct.id == nil then
+            count = count + 1
+            gameTeamsByName[teamName]["id"] = count
+        end
+    end
 end
 
 function GetTeams()
-    return gameTeamsTypes
+    return gameTeamsByName
 end
 
 function DeleteTeam(name)
@@ -65,11 +75,11 @@ function DeleteTeam(name)
         end
     end
 
-    gameTeamsTypes[name] = nil
+    gameTeamsByName[name] = nil
 end
 
 function TeamExists(name)
-    return gameTeamsTypes[name] != nil
+    return gameTeamsByName[name] != nil
 end
 
 function SetDefaultTeams()
@@ -80,7 +90,7 @@ function SetDefaultTeams()
         end
     end
 
-    gameTeamsTypes = table.Copy(defaultTeamsTypes)
+    gameTeamsByName = table.Copy(defaultTeams)
 end
 
 SetDefaultTeams()
@@ -177,7 +187,7 @@ function MergePlayersFromLobby()
 
     -- Начальная инициализация массивов игроков по тимам
     playersInTeams = {}
-    for team_name, team_color in pairs(gameTeamsTypes) do
+    for team_name, team_color in pairs(gameTeamsByName) do
         if team_name != noTeam then
             playersInTeams[team_name] = {}
         end
@@ -187,7 +197,7 @@ function MergePlayersFromLobby()
     print("Итого ждут распределения:")
     PrintTable(lobbyArray)
     -- Считаем среднее число игроков в команде. (ВАЖНО) считается здесь, так как далее из lobbyArray будут удаляться элементы!
-    local players_count_mean = math.floor(#lobbyArray / (table.Count(gameTeamsTypes) - 1)) -- NoOne не считаем
+    local players_count_mean = math.floor(#lobbyArray / (table.Count(gameTeamsByName) - 1)) -- NoOne не считаем
 
     --[[
         Распределение по тимам. 

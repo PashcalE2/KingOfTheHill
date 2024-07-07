@@ -3,6 +3,17 @@ AddCSLuaFile("shared.lua")
 include("shared.lua")
 
 --[[
+    function AddTeam(name, color)
+    function GetTeams()
+    function TeamExists(name)
+    function SetDefaultTeams()
+
+    function PutPlayerInfoToLobby(arg_ply, arg_wish_team)
+    function GetLobby()
+    function GetPlayerInfoFromLobby(arg_ply)
+    function ClearLobby()
+    function RemovePlayerInfoFromLobby(arg_ply)
+    function LobbyHasPlayerInfo(arg_ply)
 ]]--
 include("utils/teams.lua")
 
@@ -24,7 +35,7 @@ local chatCommands = {
         if (args[1] == nil) then
             sender:PrintMessage(HUD_PRINTTALK, "Вы будете распределены случайным образом.")
         else
-            if (args[1] == NoTeam or not TeamExists(args[1])) then
+            if (args[1] == noTeam or not TeamExists(args[1])) then
                 sender:PrintMessage(HUD_PRINTTALK, "Такой команды нет: '%s'. Вы будете распределены случайным образом.", args[1])
                 args[1] = nil
             else
@@ -53,7 +64,17 @@ local chatCommands = {
         end
 
         AddTeam(args[1], Color(args[2], args[3], args[4], args[5] or 255))
-        PrintTable(GetTeams())
+        sender:PrintMessage(HUD_PRINTTALK, string.format("Создана новая команда: %s", args[1]))
+    end,
+
+    delete_team = function (sender, args)
+        if (not sender:IsSuperAdmin()) then
+            sender:PrintMessage(HUD_PRINTTALK, string.format("Вы (%s) не имеете доступа к этой функции.", sender:Name()))
+            return
+        end
+
+        DeleteTeam(args[1])
+        sender:PrintMessage(HUD_PRINTTALK, string.format("Удалена команда: %s", args[1]))
     end,
 
     start_game = function (sender, args)
@@ -148,5 +169,6 @@ function ENT:OnRemove(fullUpdate)
 end
 
 function ENT:UpdateTransmitState()
-    return TRANSMIT_NEVER
+    --return TRANSMIT_NEVER
+    return TRANSMIT_ALWAYS
 end

@@ -210,13 +210,30 @@ local chatCommands = {
         for teamName, teamStruct in pairs(KOTFTeamsByName) do
             if (teamStruct.id != noTeamId) then
                 local winCounter = ents.Create("win_score_counter")
+                if (not winCounter:IsValid()) then
+                    break
+                end
+
+                winCounter:SetPos(Vector(0, 0, 0))
                 winCounter:SetTeamId(teamStruct.id)
-                winScoreCountersEnts[#winScoreCountersEnts + 1] = winCounter
+                winCounter:Spawn()
+
+                local phys = winCounter:GetPhysicsObject()
+                if (not phys:IsValid()) then
+                    break
+                end
+
+                winScoreCountersEnts[teamStruct.id] = winCounter
             end
         end
 
-        if (#winScoreCountersEnts != #playersInTeams) then
+        if (table.Count(winScoreCountersEnts) != table.Count(playersInTeams)) then
             print("НЕ УДАЛОСЬ СОЗДАТЬ ЕНТИТИ `win_score_counter`, ИГРА НЕ НАЧНЕТСЯ")
+
+            for teamId, ent in pairs(winScoreCountersEnts) do
+                ent:Remove()
+            end
+
             return
         end
 
@@ -240,19 +257,46 @@ local chatCommands = {
 
                 -- Сколько на данный момент захвачено точек у команд?
                 local onwerTeamId = criticalPoint:GetOwnerTeamId()
-                teamsCriticalPoints[onwerTeamId] = (teamsCriticalPoints[onwerTeamId] or 0) + 1
+                if (onwerTeamId != noTeamId) then
+                    teamsCriticalPoints[onwerTeamId] = (teamsCriticalPoints[onwerTeamId] or 0) + 1
+                end
             end
 
             -- Каждую секунду вычтем количество очков до победы у каждой команды с точками
             if (realTime - lastSecondRealTime > 1) then
                 lastSecondRealTime = realTime
-                for teamName, teamInfo in pairs(KOTFTeamsByName) do
-                    for teamId, cpCount in pairs(teamsCriticalPoints) do
-                        if (teamInfo.id == teamId) then
-                            KOTFTeamsByName[teamName].winPoints = KOTFTeamsByName[teamName].winPoints - cpCount
-                            break
+
+                local winners = {}
+                for teamId, cpCount in pairs(teamsCriticalPoints) do
+                    local winScore = winScoreCountersEnts[teamId]:DecreaseWinScore(cpCount)
+
+                    if (winScore == 0) then
+                        winners[#winners + 1] = teamId
+                    end
+                end
+
+                if (#winners > 0) then
+                    -- Останавливаем игру получается
+                    local winnersStr = winners[1]
+                    for k, teamId in ipairs(winners) do
+                        if (k > 1) then
+                            winnersStr = winnersStr .. " " .. teamId
                         end
                     end
+
+                    for k, plyInfo in ipairs(KOTFPlayers) do
+                        plyInfo.ply:PrintMessage(HUD_PRINTCENTER, string.format("Игра окончена! Победили следующие команды: %s", winnersStr))
+                    end
+
+                    hook.Remove("Tick", "koth_critical_points_management")
+                    for k, criticalPoint in ipairs(criticalPoints) do
+                        if not criticalPoint:IsValid() then
+                            continue
+                        end
+
+                        criticalPoint:Disable()
+                    end
+                    criticalPoints = {}
                 end
             end
         end)
@@ -302,6 +346,12 @@ end
     Так как я по приколу менял цвета игрокам - их можно вернуть здесь.
 ]]--
 function ENT:OnRemove(fullUpdate)
+    for k, ent in ipairs(winScoreCountersEnts) do
+        if (ent:IsValid()) then
+            ent:Remove()
+        end
+    end
+
     hook.Remove("PlayerSay", "koth_chat_command_listener")
     for k, plyInfo in ipairs(KOTFPlayers) do
         plyInfo.ply:PrintMessage(HUD_PRINTCENTER, "Игра окончена.")

@@ -1,3 +1,7 @@
+AddCSLuaFile("cl_init.lua")
+AddCSLuaFile("shared.lua")
+include("shared.lua")
+
 -- Server-side initialization function for the entity
 function ENT:Initialize()
     -- Из примера на wiki.facepunch.com
@@ -29,4 +33,6 @@ function ENT:DecreaseWinScore(deltaScore)
     if (oldScore != newScore) then
         self:SetWinScore(newScore)
     end
+
+    return newScore
 end

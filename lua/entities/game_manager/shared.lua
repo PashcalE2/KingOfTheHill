@@ -8,5 +8,3 @@ ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this
 ENT.Purpose = "To configure the game spawn this prop firstly." -- The purpose of this entity.
 ENT.Spawnable = true -- Specifies whether this entity can be spawned by players in the spawn menu.
 ENT.AdminOnly = true
-
-NoTeam = "NoTeam"

@@ -1,6 +1,8 @@
+-- SHARED
 
 if SERVER then
-    print("Server")
+    print("SERVER")
 else
-    print("Client: " .. LocalPlayer():Name())
+    print("CLIENT")
 end
+

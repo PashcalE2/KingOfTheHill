@@ -3,50 +3,16 @@ AddCSLuaFile("shared.lua")
 include("shared.lua")
 
 --[[
-    Game logic
 ]]--
-
-local DefaultTeamsTypes = {
-    [NoTeam] = Color(255, 255, 255, 255),
-    ["Red"] = Color(255, 63, 0, 255),
-    ["Blue"] = Color(0, 127, 255, 255)
-}
-
-local GameTeamsTypes = {}
-
-function AddTeam(name, color)
-    GameTeamsTypes[name] = color
-end
-
-function SetDefaultTeams()
-    GameTeamsTypes = table.Copy(DefaultTeamsTypes)
-end
-
-SetDefaultTeams()
-
---[[
-    Players
-]]--
-
-local PlayersInLobby = {}
-
-function RemovePlayerFromLobby(arg_ply)
-    PlayersInLobby[arg_ply:SteamID64()] = nil
-end
-
-function LobbyHasPlayer(arg_ply)
-    return PlayersInLobby[arg_ply:SteamID64()] != nil
-end
-
-local PlayersInTeams = {}
+include("utils/teams.lua")
 
 --[[
     Chat
 ]]--
 
-local ChatCommandsPrefix = "/"
-local ChatCommandsPrefixLen = string.len(ChatCommandsPrefix)
-local ChatCommands = {
+local chatCommandsPrefix = "/"
+local chatCommandsPrefixLen = string.len(chatCommandsPrefix)
+local chatCommands = {
     join = function (sender, args)
         --[[
         if (LobbyHasPlayer(sender)) then
@@ -58,14 +24,15 @@ local ChatCommands = {
         if (args[1] == nil) then
             sender:PrintMessage(HUD_PRINTTALK, "Вы будете распределены случайным образом.")
         else
-            if (args[1] == NoTeam or GameTeamsTypes[args[1]] == nil) then
+            if (args[1] == NoTeam or not TeamExists(args[1])) then
                 sender:PrintMessage(HUD_PRINTTALK, "Такой команды нет: '%s'. Вы будете распределены случайным образом.", args[1])
+                args[1] = nil
             else
                 sender:PrintMessage(HUD_PRINTTALK, string.format("Вы хотите в команду %s.", args[1]))
             end
         end
 
-        PlayersInLobby[sender:SteamID64()] = { ply = sender, wish_team = args[1] }
+        PutPlayerInfoToLobby(sender, args[1])
         sender:PrintMessage(HUD_PRINTTALK, string.format("Вы (%s) добавили себя в игру.", sender:Name()))
     end,
 
@@ -75,7 +42,7 @@ local ChatCommands = {
             return
         end
 
-        RemovePlayerFromLobby(sender)
+        RemovePlayerInfoFromLobby(sender)
         sender:PrintMessage(HUD_PRINTTALK, string.format("Вы (%s) вышли из игры.", sender:Name()))
     end,
 
@@ -86,7 +53,7 @@ local ChatCommands = {
         end
 
         AddTeam(args[1], Color(args[2], args[3], args[4], args[5] or 255))
-        PrintTable(GameTeamsTypes)
+        PrintTable(GetTeams())
     end,
 
     start_game = function (sender, args)
@@ -95,121 +62,37 @@ local ChatCommands = {
             return
         end
 
-        local function randteam()
-            local rand = math.random()
-            if (rand < 0.3) then
-                return "Red"
-            elseif (rand < 0.5) then
-                return "Blue"
-            end
-            return nil
-        end
-
-        PlayersInLobby = {}
-        for k, v in ipairs(player.GetAll()) do
-            PlayersInLobby[v:SteamID64()] = { ply = v, wish_team = randteam() }
-        end
-
-        local FinalLobby = {}
-        for steamid64, ply_info in pairs(PlayersInLobby) do
-            FinalLobby[#FinalLobby + 1] = ply_info
-        end
-        PlayersInLobby = {}
-
-        PlayersInTeams = {}
-        for team_name, team_color in pairs(GameTeamsTypes) do
-            if team_name != NoTeam then
-                PlayersInTeams[team_name] = {}
-            end
-        end
-
-        print("====================================================")
-        print("Итого ждут распределения:")
-        PrintTable(FinalLobby)
-        local players_count_mean = math.floor(#FinalLobby / (table.Count(GameTeamsTypes) - 1)) -- NoOne не считаем
-
         --[[
-            Распределение по тимам. 
-            Те кто не выбирал тиму - остаются в лобби.
-            Остальные определяются в выбранную команду.
+            Для тестов:
+                * я спавню N ботов 
+                * происходит генерация случайных тим для игроков на сервере
         ]]--
-        local RemoveList = {}
-        for k, ply_info in ipairs(FinalLobby) do
-            if (ply_info.wish_team != nil) then
-                PlayersInTeams[ply_info.wish_team][#PlayersInTeams[ply_info.wish_team] + 1] = ply_info.ply
-                RemoveList[#RemoveList + 1] = ply_info
-            end
-        end
-
-        for k, v in ipairs(RemoveList) do
-            table.RemoveByValue(FinalLobby, v)
-        end
-
-        print("====================================================")
-        print("Измененное лобби:")
-        PrintTable(FinalLobby)
-
-        print("====================================================")
-        print("Распределили желающих по командам:")
-        PrintTable(PlayersInTeams)
-
-        --[[
-            Считаем среднее число в команде.
-            Та команда, в которой: количество игроков - 1 > среднее => будет пересобрана:
-                * мешаем массив
-                * убираем лишних в лобби
-        ]]--
-        print("====================================================")
-        print("Среднее количество игроков в команде = " .. players_count_mean)
-        print("Удаление лишних игроков:")
-
-        for team_name, team_array in pairs(PlayersInTeams) do
-            local move_count = #team_array - players_count_mean
-            print(string.format("Количество игроков которое необходимо удалить из команды %s = %d", team_name, move_count))
-            if (move_count > 0) then
-                table.Shuffle(team_array)
-                for i = 1, move_count do
-                    FinalLobby[#FinalLobby + 1] = { ply = team_array[#team_array], wish_team = nil }
-                    print(team_array[#team_array])
-                    team_array[#team_array] = nil
+        local function createRandomTestCase()
+            local function randteam()
+                local rand = math.random()
+                if (rand < 0.3) then
+                    return "Red"
+                elseif (rand < 0.5) then
+                    return "Blue"
                 end
+                return nil
+            end
+
+            ClearLobby()
+            for k, v in ipairs(player.GetAll()) do
+                PutPlayerInfoToLobby(v, randteam())
             end
         end
 
-        print("Измененные команды:")
-        PrintTable(PlayersInTeams)
+        createRandomTestCase()
 
-        table.Shuffle(FinalLobby)
-        print("====================================================")
-        print("Перемешанное лобби:")
-        PrintTable(FinalLobby)
-        --[[
-            Для всех команд, в которых число игроков меньше среднего, добавим необходимое количество.
-            Так как "среднее" может быть дробным - пока что добавим до округленного вниз среднего (чтобы у всех было такое число игроков).
-        ]]--
-        print("====================================================")
-        print("Добавление в команды")
-        for team_name, team_array in pairs(PlayersInTeams) do
-            local add_count = players_count_mean - #team_array
-            if (add_count > 0) then
-                for i = 1, add_count do
-                    team_array[#team_array + 1] = FinalLobby[#FinalLobby].ply
-                    FinalLobby[#FinalLobby] = nil
-                end
-            end
-        end
+        --]]--
 
-        print("Итоговые команды:")
-        PrintTable(PlayersInTeams)
+        local PlayersInTeams = {}
+        local KickedPlayersArray = {}
+        PlayersInTeams, KickedPlayersArray = MergePlayersFromLobby()
 
-        --[[
-            Оставшиеся не играют.
-            Можно их случайно распределить, но это надо балансить
-        ]]--
-        print("====================================================")
-        print("Оставшиеся не играют:")
-        PrintTable(FinalLobby)
-        for steamid64, ply_info in ipairs(FinalLobby) do
+        for steamid64, ply_info in ipairs(KickedPlayersArray) do
             ply_info.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
         end
 
@@ -218,6 +101,10 @@ local ChatCommands = {
                 ply:PrintMessage(HUD_PRINTTALK, string.format("Вы начинаете за команду '%s'!", team_name))
             end
         end
+
+        --[[
+            Теперь когда игроки распределены, можно начинать игру
+        ]]--
     end
 }
 
@@ -236,20 +123,20 @@ function ENT:Initialize()
         phys:Wake() -- Activates the physics object, making the entity subject to physics (gravity, collisions, etc.).
     end
 
-    hook.Remove("PlayerSay", "chat_commands_listener")
-    hook.Add("PlayerSay", "chat_commands_listener", function (sender, text, teamChat)
-        if (string.sub(text, 1, ChatCommandsPrefixLen) == ChatCommandsPrefix) then
+    hook.Remove("PlayerSay", "koth_chat_command_listener")
+    hook.Add("PlayerSay", "koth_chat_command_listener", function (sender, text, teamChat)
+        if (string.sub(text, 1, chatCommandsPrefixLen) == chatCommandsPrefix) then
             local args = string.Explode(" +", text, true)
 
-            local chat_command_name = string.TrimLeft(args[1], ChatCommandsPrefix)
-            local chat_command = ChatCommands[chat_command_name]
+            local chatCommandName = string.TrimLeft(args[1], chatCommandsPrefix)
+            local chatCommand = chatCommands[chatCommandName]
 
             table.remove(args, 1)
 
-            if (chat_command == nil) then
+            if (chatCommand == nil) then
                 sender:PrintMessage(HUD_PRINTTALK, string.format("Нет такой чат-команды '%s'", text))
             else
-                chat_command(sender, args)
+                chatCommand(sender, args)
                 PrintTable(args)
             end
         end
@@ -257,5 +144,9 @@ function ENT:Initialize()
 end
 
 function ENT:OnRemove(fullUpdate)
-    hook.Remove("PlayerSay", "chat_commands_listener")
+    hook.Remove("PlayerSay", "koth_chat_command_listener")
+end
+
+function ENT:UpdateTransmitState()
+    return TRANSMIT_NEVER
 end

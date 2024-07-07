@@ -20,7 +20,7 @@ noTeam = "noTeam"
 
 
 --[[
-    Пусть пока структура описывающая тиму будет очень простая:
+Пусть пока структура описывающая тиму будет очень простая:
         * [<TeamName>] = <Color>
 
     По-умолчанию сделаю 2 команды, но их количество можно менять динамически (в игре).
@@ -47,9 +47,12 @@ function GetTeams()
 end
 
 function DeleteTeam(name)
-    for k, ply_info in pairs(playersInLobby) do
-        if (ply_info.wishTeam == name) then
-            playersInLobby[k].wishTeam = nil
+    if playersInLobby then
+        for k, plyInfo in pairs(playersInLobby) do
+            if (plyInfo.wishTeam == name) then
+                plyInfo.ply:PrintMessage(HUD_PRINTTALK, string.format("Команда '%s' была удалена админом. Ваше желание находиться в этой команде сброшено.", name))
+                playersInLobby[k].wishTeam = nil
+            end
         end
     end
 
@@ -61,6 +64,13 @@ function TeamExists(name)
 end
 
 function SetDefaultTeams()
+    if playersInLobby then
+        for k, plyInfo in pairs(playersInLobby) do
+            plyInfo.ply:PrintMessage(HUD_PRINTTALK, string.format("Были установлены стандартные команды. Ваше желание находиться в команде '%s' сброшено.", plyInfo.wishTeam))
+            playersInLobby[k].wishTeam = nil
+        end
+    end
+
     gameTeamsTypes = table.Copy(defaultTeamsTypes)
 end
 
@@ -148,8 +158,8 @@ playersInTeams = {}
 function MergePlayersFromLobby()
     -- Делаем массив от 1 до N (удобен для перемешки и обращения к элементам) из полученного лобби
     local lobbyArray = {}
-    for k, ply_info in pairs(playersInLobby) do
-        lobbyArray[#lobbyArray + 1] = ply_info
+    for k, plyInfo in pairs(playersInLobby) do
+        lobbyArray[#lobbyArray + 1] = plyInfo
     end
     playersInLobby = {}
 
@@ -174,10 +184,10 @@ function MergePlayersFromLobby()
     ]]--
 
     local removeList = {}
-    for k, ply_info in ipairs(lobbyArray) do
-        if (ply_info.wishTeam != nil) then
-            playersInTeams[ply_info.wishTeam][#playersInTeams[ply_info.wishTeam] + 1] = ply_info.ply
-            removeList[#removeList + 1] = ply_info
+    for k, plyInfo in ipairs(lobbyArray) do
+        if (plyInfo.wishTeam != nil) then
+            playersInTeams[plyInfo.wishTeam][#playersInTeams[plyInfo.wishTeam] + 1] = plyInfo.ply
+            removeList[#removeList + 1] = plyInfo
         end
     end
 

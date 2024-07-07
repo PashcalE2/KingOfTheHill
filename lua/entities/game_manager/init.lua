@@ -5,6 +5,7 @@ include("shared.lua")
 --[[
     function AddTeam(name, color)
     function GetTeams()
+    function DeleteTeam(name)
     function TeamExists(name)
     function SetDefaultTeams()
 
@@ -14,6 +15,8 @@ include("shared.lua")
     function ClearLobby()
     function RemovePlayerInfoFromLobby(arg_ply)
     function LobbyHasPlayerInfo(arg_ply)
+
+    function MergePlayersFromLobby()
 ]]--
 include("utils/teams.lua")
 
@@ -63,7 +66,7 @@ local chatCommands = {
             return
         end
 
-        AddTeam(args[1], Color(args[2], args[3], args[4], args[5] or 255))
+        AddTeam(args[1], Color(args[2], args[3], args[4], 255))
         sender:PrintMessage(HUD_PRINTTALK, string.format("Создана новая команда: %s", args[1]))
     end,
 
@@ -74,7 +77,17 @@ local chatCommands = {
         end
 
         DeleteTeam(args[1])
-        sender:PrintMessage(HUD_PRINTTALK, string.format("Удалена команда: %s", args[1]))
+        sender:PrintMessage(HUD_PRINTTALK, string.format("Удалена команда '%s'", args[1]))
+    end,
+
+    default_teams = function (sender, args)
+        if (not sender:IsSuperAdmin()) then
+            sender:PrintMessage(HUD_PRINTTALK, string.format("Вы (%s) не имеете доступа к этой функции.", sender:Name()))
+            return
+        end
+
+        SetDefaultTeams()
+        sender:PrintMessage(HUD_PRINTTALK, string.format("Установлены стандартные команды"))
     end,
 
     start_game = function (sender, args)
@@ -113,8 +126,8 @@ local chatCommands = {
         local KickedPlayersArray = {}
         PlayersInTeams, KickedPlayersArray = MergePlayersFromLobby()
 
-        for steamid64, ply_info in ipairs(KickedPlayersArray) do
-            ply_info.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
+        for steamid64, plyInfo in ipairs(KickedPlayersArray) do
+            plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
         end
 
         for team_name, team_array in pairs(PlayersInTeams) do
@@ -126,6 +139,8 @@ local chatCommands = {
         --[[
             Теперь когда игроки распределены, можно начинать игру
         ]]--
+
+
     end
 }
 

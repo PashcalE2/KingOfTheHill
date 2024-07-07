@@ -7,7 +7,7 @@ include("shared.lua")
     Глобальные переменные:
         noTeam
         noTeamId
-        gameTeamsByName
+        KOTFTeamsByName
 
     Глобальные функции:
         AddTeam(name, color)
@@ -33,12 +33,15 @@ include("utils/teams.lua")
     Game logic
 ]]--
 
-local lastRealTime
+local lastTickRealTime
+local lastSecondRealTime
+
 local criticalPoints = {}
 KOTFPlayers = {}
+winScoreCountersEnts = {}
 
 local function PushPlayerToGame(argPly, argTeamId, argTeamName)
-    KOTFPlayers[#KOTFPlayers + 1] = { 
+    KOTFPlayers[#KOTFPlayers + 1] = {
         ply = argPly,
         teamId = argTeamId,
         teamName = argTeamName,
@@ -162,8 +165,7 @@ local chatCommands = {
         local kickedPlayersArray = {}
         playersInTeams, kickedPlayersArray = MergePlayersFromLobby()
 
-        UpdateTeamsIds()
-        local gameTeamsByName = GetTeams()
+        AddGameLogicToTeams()
 
         for steamid64, plyInfo in ipairs(kickedPlayersArray) do
             plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
@@ -182,7 +184,7 @@ local chatCommands = {
         KOTFPlayers = {}
         for teamName, teamArray in pairs(playersInTeams) do
             for k, ply in pairs(teamArray) do
-                local teamStruct = gameTeamsByName[teamName]
+                local teamStruct = KOTFTeamsByName[teamName]
                 PushPlayerToGame(ply, teamStruct.id, teamName)
                 ply:PrintMessage(HUD_PRINTTALK, string.format("Вы начинаете за команду '%s'!", teamName))
 
@@ -195,27 +197,64 @@ local chatCommands = {
 
         --[[
             Теперь когда игроки распределены, можно начинать игру:
-                1. расставить игроков по позициям;
-                2. возможно для пафоса зафризить и поставить таймер, после которого игра начнется;
-                3. ...
+                * создать счетчики победы;
+                * жизнь точкам;
+            
+            (Добавить?)
+                * расставить игроков по позициям;
+                * возможно для пафоса зафризить и поставить таймер, после которого игра начнется;
+                * ...
         ]]--
 
-        lastRealTime = RealTime()
-        PrintTable(KOTFPlayers)
+        winScoreCountersEnts = {}
+        for teamName, teamStruct in pairs(KOTFTeamsByName) do
+            if (teamStruct.id != noTeamId) then
+                local winCounter = ents.Create("win_score_counter")
+                winCounter:SetTeamId(teamStruct.id)
+                winScoreCountersEnts[#winScoreCountersEnts + 1] = winCounter
+            end
+        end
+
+        if (#winScoreCountersEnts != #playersInTeams) then
+            print("НЕ УДАЛОСЬ СОЗДАТЬ ЕНТИТИ `win_score_counter`, ИГРА НЕ НАЧНЕТСЯ")
+            return
+        end
+
+        lastTickRealTime = RealTime()
+        lastSecondRealTime = RealTime()
         hook.Remove("Tick", "koth_critical_points_management")
         hook.Add("Tick", "koth_critical_points_management", function ()
             local realTime = RealTime()
-            local tickInterval = realTime - lastRealTime
+            local tickInterval = realTime - lastTickRealTime
+            lastTickRealTime = realTime
+
+            local teamsCriticalPoints = {}
 
             for k, criticalPoint in ipairs(criticalPoints) do
+                -- Если по какой-то причине точка удалена, то пропустим её...
                 if not criticalPoint:IsValid() then
                     continue
                 end
 
                 criticalPoint:InteractWithPlayers(tickInterval)
+
+                -- Сколько на данный момент захвачено точек у команд?
+                local onwerTeamId = criticalPoint:GetOwnerTeamId()
+                teamsCriticalPoints[onwerTeamId] = (teamsCriticalPoints[onwerTeamId] or 0) + 1
             end
 
-            lastRealTime = realTime
+            -- Каждую секунду вычтем количество очков до победы у каждой команды с точками
+            if (realTime - lastSecondRealTime > 1) then
+                lastSecondRealTime = realTime
+                for teamName, teamInfo in pairs(KOTFTeamsByName) do
+                    for teamId, cpCount in pairs(teamsCriticalPoints) do
+                        if (teamInfo.id == teamId) then
+                            KOTFTeamsByName[teamName].winPoints = KOTFTeamsByName[teamName].winPoints - cpCount
+                            break
+                        end
+                    end
+                end
+            end
         end)
     end
 }

@@ -45,24 +45,27 @@ defaultTeams = {
     Эта таблица описывает какие команды есть на данный момент.
     При запуске этого скрипта в первый раз (а так же наверно сделаю chat команду) будет эквивалентно тимам по-умолчанию
 ]]--
-gameTeamsByName = {}
+KOTFTeamsByName = {}
 
 function AddTeam(name, argColor)
-    gameTeamsByName[name] = { color = argColor }
+    KOTFTeamsByName[name] = { color = argColor }
 end
 
-function UpdateTeamsIds()
+--[[
+    Чтобы не создавать сто раз копии одного и того же, просто допишем необходимую для игры инорфмацию в существующую таблицу
+]]--
+function AddGameLogicToTeams()
     local count = 0
-    for teamName, teamStruct in pairs(gameTeamsByName) do
-        if teamStruct.id == nil then
+    for teamName, teamStruct in pairs(KOTFTeamsByName) do
+        if (teamStruct.id == nil) then
             count = count + 1
-            gameTeamsByName[teamName]["id"] = count
+            KOTFTeamsByName[teamName]["id"] = count
         end
     end
 end
 
 function GetTeams()
-    return gameTeamsByName
+    return KOTFTeamsByName
 end
 
 function DeleteTeam(name)
@@ -75,11 +78,11 @@ function DeleteTeam(name)
         end
     end
 
-    gameTeamsByName[name] = nil
+    KOTFTeamsByName[name] = nil
 end
 
 function TeamExists(name)
-    return gameTeamsByName[name] != nil
+    return KOTFTeamsByName[name] != nil
 end
 
 function SetDefaultTeams()
@@ -90,7 +93,7 @@ function SetDefaultTeams()
         end
     end
 
-    gameTeamsByName = table.Copy(defaultTeams)
+    KOTFTeamsByName = table.Copy(defaultTeams)
 end
 
 SetDefaultTeams()
@@ -185,11 +188,11 @@ function MergePlayersFromLobby()
     end
     playersInLobby = {}
 
-    -- Начальная инициализация массивов игроков по тимам
+    -- Начальная инициализация массивов игроков по тимам (noTeam не в счет)
     playersInTeams = {}
-    for team_name, team_color in pairs(gameTeamsByName) do
-        if team_name != noTeam then
-            playersInTeams[team_name] = {}
+    for teamName, teamStruct in pairs(KOTFTeamsByName) do
+        if teamName != noTeam then
+            playersInTeams[teamName] = {}
         end
     end
 
@@ -197,7 +200,7 @@ function MergePlayersFromLobby()
     print("Итого ждут распределения:")
     PrintTable(lobbyArray)
     -- Считаем среднее число игроков в команде. (ВАЖНО) считается здесь, так как далее из lobbyArray будут удаляться элементы!
-    local players_count_mean = math.floor(#lobbyArray / (table.Count(gameTeamsByName) - 1)) -- NoOne не считаем
+    local playersCountMean = math.floor(#lobbyArray / (table.Count(KOTFTeamsByName) - 1)) -- NoOne не считаем
 
     --[[
         Распределение по тимам. 
@@ -231,18 +234,18 @@ function MergePlayersFromLobby()
             * убираем лишних (по количеству) в лобби.
     ]]--
     print("====================================================")
-    print("Среднее количество игроков в команде = " .. players_count_mean)
+    print("Среднее количество игроков в команде = " .. playersCountMean)
     print("Удаление лишних игроков:")
 
-    for team_name, team_array in pairs(playersInTeams) do
-        local move_count = #team_array - players_count_mean
-        print(string.format("Количество игроков которое необходимо удалить из команды %s = %d", team_name, move_count))
-        if (move_count > 0) then
-            table.Shuffle(team_array)
-            for i = 1, move_count do
-                lobbyArray[#lobbyArray + 1] = { ply = team_array[#team_array], wishTeam = nil }
-                print(team_array[#team_array])
-                team_array[#team_array] = nil
+    for teamName, teamArray in pairs(playersInTeams) do
+        local moveCount = #teamArray - playersCountMean
+        print(string.format("Количество игроков которое необходимо удалить из команды %s = %d", teamName, moveCount))
+        if (moveCount > 0) then
+            table.Shuffle(teamArray)
+            for i = 1, moveCount do
+                lobbyArray[#lobbyArray + 1] = { ply = teamArray[#teamArray], wishTeam = nil }
+                print(teamArray[#teamArray])
+                teamArray[#teamArray] = nil
             end
         end
     end
@@ -260,11 +263,11 @@ function MergePlayersFromLobby()
     ]]--
     print("====================================================")
     print("Добавление в команды")
-    for team_name, team_array in pairs(playersInTeams) do
-        local add_count = players_count_mean - #team_array
-        if (add_count > 0) then
-            for i = 1, add_count do
-                team_array[#team_array + 1] = lobbyArray[#lobbyArray].ply
+    for teamName, teamArray in pairs(playersInTeams) do
+        local addCount = playersCountMean - #teamArray
+        if (addCount > 0) then
+            for i = 1, addCount do
+                teamArray[#teamArray + 1] = lobbyArray[#lobbyArray].ply
                 lobbyArray[#lobbyArray] = nil
             end
         end

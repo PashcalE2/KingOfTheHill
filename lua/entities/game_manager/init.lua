@@ -33,12 +33,16 @@ include("utils/teams.lua")
     Game logic
 ]]--
 
+util.AddNetworkString("KOTFGameStarted")
+util.AddNetworkString("KOTFGameFinished")
+
 local lastTickRealTime
 local lastSecondRealTime
 
-local criticalPoints = {}
-KOTFPlayers = {}
-winScoreCountersEnts = {}
+local criticalPoints
+KOTFPlayers = nil
+netReceivers = nil
+winScoreCountersEnts = nil
 
 local function PushPlayerToGame(argPly, argTeamId, argTeamName)
     KOTFPlayers[#KOTFPlayers + 1] = {
@@ -48,6 +52,7 @@ local function PushPlayerToGame(argPly, argTeamId, argTeamName)
         oldPlyColor = argPly:GetPlayerColor()
     }
 end
+
 
 --[[
     Chat
@@ -167,11 +172,6 @@ local chatCommands = {
 
         AddGameLogicToTeams()
 
-        for steamid64, plyInfo in ipairs(kickedPlayersArray) do
-            plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
-        end
-
-
         --[[
             Теперь когда все манипуляции по перемещение игроков из команды в команду завершены, 
             нам может потребоваться более простой массив игроков:
@@ -193,6 +193,15 @@ local chatCommands = {
                 ply:SetPlayerColor(Vector(teamStruct.color.r, teamStruct.color.g, teamStruct.color.b) / 255)
                 --]]--
             end
+        end
+
+        if (#KOTFPlayers == 0) then
+            sender:PrintMessage(HUD_PRINTTALK, "Не хватает игроков для запуска игры.")
+            return
+        end
+
+        for steamid64, plyInfo in ipairs(kickedPlayersArray) do
+            plyInfo.ply:PrintMessage(HUD_PRINTTALK, "Вас выгнали из игры, так как с Вами не получилось распределить по-ровну.")
         end
 
         --[[
@@ -236,6 +245,16 @@ local chatCommands = {
 
             return
         end
+
+
+        netReceivers = {}
+        for k, plyInfo in ipairs(KOTFPlayers) do
+            netReceivers[#netReceivers + 1] = plyInfo.ply
+        end
+
+        net.Start("KOTFGameStarted")
+        net.Send(netReceivers)
+
 
         lastTickRealTime = RealTime()
         lastSecondRealTime = RealTime()
@@ -289,14 +308,13 @@ local chatCommands = {
                     end
 
                     hook.Remove("Tick", "koth_critical_points_management")
-                    for k, criticalPoint in ipairs(criticalPoints) do
-                        if not criticalPoint:IsValid() then
-                            continue
-                        end
+                    ClearCriticalPoints()
 
-                        criticalPoint:Disable()
+                    if (netReceivers) then
+                        net.Start("KOTFGameFinished")
+                        net.Send(netReceivers)
+                        netReceivers = nil
                     end
-                    criticalPoints = {}
                 end
             end
         end)
@@ -345,29 +363,55 @@ end
     Тут должно произойти сообщение об окончании игры и восставновления аддона до АДЕКВАТНОГО первоначального состояния.
     Так как я по приколу менял цвета игрокам - их можно вернуть здесь.
 ]]--
-function ENT:OnRemove(fullUpdate)
-    for k, ent in ipairs(winScoreCountersEnts) do
-        if (ent:IsValid()) then
-            ent:Remove()
+
+function ClearWinScoreCounters()
+    if (winScoreCountersEnts) then
+        for k, ent in pairs(winScoreCountersEnts) do
+            if (ent:IsValid()) then
+                ent:Remove()
+            end
         end
+        winScoreCountersEnts = nil
     end
+end
+
+function ClearKOTFPlayers()
+    if (KOTFPlayers) then
+        for k, plyInfo in ipairs(KOTFPlayers) do
+            plyInfo.ply:PrintMessage(HUD_PRINTCENTER, "Игра окончена.")
+            plyInfo.ply:SetPlayerColor(plyInfo.oldPlyColor)
+        end
+        KOTFPlayers = nil
+    end
+end
+
+function ClearCriticalPoints()
+    if (criticalPoints) then
+        for k, criticalPoint in ipairs(criticalPoints) do
+            if not criticalPoint:IsValid() then
+                continue
+            end
+
+            criticalPoint:Disable()
+        end
+        criticalPoints = nil
+    end
+end
+
+function ENT:OnRemove(fullUpdate)
+    ClearWinScoreCounters()
 
     hook.Remove("PlayerSay", "koth_chat_command_listener")
-    for k, plyInfo in ipairs(KOTFPlayers) do
-        plyInfo.ply:PrintMessage(HUD_PRINTCENTER, "Игра окончена.")
-        plyInfo.ply:SetPlayerColor(plyInfo.oldPlyColor)
-    end
-    KOTFPlayers = {}
+    ClearKOTFPlayers()
 
     hook.Remove("Tick", "koth_critical_points_management")
-    for k, criticalPoint in ipairs(criticalPoints) do
-        if not criticalPoint:IsValid() then
-            continue
-        end
+    ClearCriticalPoints()
 
-        criticalPoint:Disable()
+    if (netReceivers) then
+        net.Start("KOTFGameFinished")
+        net.Send(netReceivers)
+        netReceivers = nil
     end
-    criticalPoints = {}
 end
 
 function ENT:UpdateTransmitState()

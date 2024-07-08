@@ -10,7 +10,7 @@ ENT.Spawnable = true -- Specifies whether this entity can be spawned by players 
 ENT.AdminOnly = true
 
 
-defaultStartWinScore = 5
+defaultStartWinScore = 30
 
 
 function ENT:SetupDataTables()
